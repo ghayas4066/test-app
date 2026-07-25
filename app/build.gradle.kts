@@ -11,8 +11,8 @@ android {
         applicationId = "com.example.testapp"
         minSdk = 24
         targetSdk = 36
-        versionCode = 3
-        versionName = "1.2"
+        versionCode = 4
+        versionName = "1.3"
     }
 
     buildTypes {
@@ -91,6 +91,7 @@ dependencies {
   implementation("androidx.camera:camera-camera2:1.4.0")
   implementation("androidx.camera:camera-lifecycle:1.4.0")
   implementation("androidx.camera:camera-view:1.4.0")
+  implementation("androidx.camera:camera-video:1.4.0")
   
   // ML Kit Face Detection
   implementation("com.google.mlkit:face-detection:16.1.7")

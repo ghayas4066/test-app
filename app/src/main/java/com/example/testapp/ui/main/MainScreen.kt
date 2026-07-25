@@ -21,6 +21,11 @@ import androidx.camera.core.ImageCaptureException
 import androidx.camera.view.CameraController
 import androidx.camera.view.LifecycleCameraController
 import androidx.camera.view.PreviewView
+import androidx.camera.video.FileOutputOptions
+import androidx.camera.video.Recording
+import androidx.camera.video.VideoRecordEvent
+import androidx.camera.view.video.AudioConfig
+import androidx.core.util.Consumer
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -458,6 +463,7 @@ fun CameraScreen(
     var isRecording by remember { mutableStateOf(false) }
 
     var showSettingsDialog by remember { mutableStateOf(false) }
+    var activeRecording by remember { mutableStateOf<Recording?>(null) }
 
     val vibrator = remember { context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator }
     val cameraExecutor = remember { Executors.newSingleThreadExecutor() }
@@ -599,64 +605,111 @@ fun CameraScreen(
                         isCapturing = true
                         triggerVibration("center")
 
-                        if (settings.autoCapture == "Off") {
-                            speakText("Perfect! Tap screen to capture.")
-                            isCountingDown = false
-                        } else {
-                            if (settings.timerDelay > 0) {
-                                val secs = settings.timerDelay / 1000
-                                speakText("Capturing in $secs seconds.")
-                                Handler(Looper.getMainLooper()).postDelayed({
-                                    if (isCountingDown) {
-                                        // Take photo
-                                        val photoFile = File(context.cacheDir, "Selfie_${System.currentTimeMillis()}.jpg")
-                                        val outputOptions = ImageCapture.OutputFileOptions.Builder(photoFile).build()
-                                        cameraController.takePicture(
-                                            outputOptions,
-                                            ContextCompat.getMainExecutor(context),
-                                            object : ImageCapture.OnImageSavedCallback {
-                                                override fun onImageSaved(outputFileResults: ImageCapture.OutputFileResults) {
-                                                    isCountingDown = false
-                                                    isCapturing = false
-                                                    onMediaCaptured(photoFile, false)
-                                                }
-
-                                                override fun onError(exception: ImageCaptureException) {
-                                                    isCountingDown = false
-                                                    isCapturing = false
-                                                    speakText("Error: ${exception.message}")
-                                                }
-                                            }
-                                        )
-                                    }
-                                }, settings.timerDelay)
+                        if (isPhotoMode) {
+                            if (settings.autoCapture == "Off") {
+                                speakText("Perfect! Tap screen to capture.")
+                                isCountingDown = false
                             } else {
-                                speakText("Click!")
-                                val photoFile = File(context.cacheDir, "Selfie_${System.currentTimeMillis()}.jpg")
-                                val outputOptions = ImageCapture.OutputFileOptions.Builder(photoFile).build()
-                                cameraController.takePicture(
-                                    outputOptions,
-                                    ContextCompat.getMainExecutor(context),
-                                    object : ImageCapture.OnImageSavedCallback {
-                                        override fun onImageSaved(outputFileResults: ImageCapture.OutputFileResults) {
-                                            isCountingDown = false
-                                            isCapturing = false
-                                            onMediaCaptured(photoFile, false)
+                                if (settings.timerDelay > 0) {
+                                    val secs = settings.timerDelay / 1000
+                                    speakText("Capturing in $secs seconds.")
+                                    Handler(Looper.getMainLooper()).postDelayed({
+                                        if (isCountingDown) {
+                                            // Take photo
+                                            val photoFile = File(context.cacheDir, "Selfie_${System.currentTimeMillis()}.jpg")
+                                            val outputOptions = ImageCapture.OutputFileOptions.Builder(photoFile).build()
+                                            cameraController.takePicture(
+                                                outputOptions,
+                                                ContextCompat.getMainExecutor(context),
+                                                object : ImageCapture.OnImageSavedCallback {
+                                                    override fun onImageSaved(outputFileResults: ImageCapture.OutputFileResults) {
+                                                        isCountingDown = false
+                                                        isCapturing = false
+                                                        onMediaCaptured(photoFile, false)
+                                                    }
+    
+                                                    override fun onError(exception: ImageCaptureException) {
+                                                        isCountingDown = false
+                                                        isCapturing = false
+                                                        speakText("Error: ${exception.message}")
+                                                    }
+                                                }
+                                            )
                                         }
-
-                                        override fun onError(exception: ImageCaptureException) {
-                                            isCountingDown = false
-                                            isCapturing = false
-                                            speakText("Error: ${exception.message}")
+                                    }, settings.timerDelay)
+                                } else {
+                                    speakText("Click!")
+                                    val photoFile = File(context.cacheDir, "Selfie_${System.currentTimeMillis()}.jpg")
+                                    val outputOptions = ImageCapture.OutputFileOptions.Builder(photoFile).build()
+                                    cameraController.takePicture(
+                                        outputOptions,
+                                        ContextCompat.getMainExecutor(context),
+                                        object : ImageCapture.OnImageSavedCallback {
+                                            override fun onImageSaved(outputFileResults: ImageCapture.OutputFileResults) {
+                                                isCountingDown = false
+                                                isCapturing = false
+                                                onMediaCaptured(photoFile, false)
+                                            }
+    
+                                            override fun onError(exception: ImageCaptureException) {
+                                                isCountingDown = false
+                                                isCapturing = false
+                                                speakText("Error: ${exception.message}")
+                                            }
+                                        }
+                                    )
+                                }
+                            }
+                        } else {
+                            // Video Mode
+                            if (settings.autoCapture == "Off") {
+                                speakText("Perfect! Tap screen to start recording.")
+                                isCountingDown = false
+                            } else {
+                                speakText("Recording started.")
+                                val videoFile = File(context.cacheDir, "Video_${System.currentTimeMillis()}.mp4")
+                                val outputOptions = FileOutputOptions.Builder(videoFile).build()
+                                
+                                @Suppress("MissingPermission")
+                                val recording = cameraController.startRecording(
+                                    outputOptions,
+                                    AudioConfig.create(true),
+                                    ContextCompat.getMainExecutor(context)
+                                ) { event ->
+                                    if (event is VideoRecordEvent.Finalize) {
+                                        isCountingDown = false
+                                        isCapturing = false
+                                        isRecording = false
+                                        if (!event.hasError()) {
+                                            onMediaCaptured(videoFile, true)
+                                        } else {
+                                            speakText("Video error.")
                                         }
                                     }
-                                )
+                                }
+                                activeRecording = recording
+                                isRecording = true
+                                
+                                // Auto stop after 10 seconds
+                                Handler(Looper.getMainLooper()).postDelayed({
+                                    if (activeRecording != null) {
+                                        speakText("Recording stopped.")
+                                        activeRecording?.stop()
+                                        activeRecording = null
+                                    }
+                                }, 10000)
                             }
                         }
                     } else if (!result.isCentered && isCountingDown) {
-                        isCountingDown = false
-                        isCapturing = false
-                        speakText("Timer canceled. You moved.")
+                        if (isRecording) {
+                            speakText("You moved. Stopping recording.")
+                            activeRecording?.stop()
+                            activeRecording = null
+                        } else {
+                            isCountingDown = false
+                            isCapturing = false
+                            speakText("Timer canceled. You moved.")
+                        }
                     }
                 }
             )
@@ -691,32 +744,68 @@ fun CameraScreen(
         )
 
         // Shutter / Capture Trigger Overlay (when autoCapture is off)
-        if (settings.autoCapture == "Off" && isCapturing && !isRecording) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .clickable {
-                        isCapturing = true
-                        speakText("Click!")
-                        val photoFile = File(context.cacheDir, "Selfie_${System.currentTimeMillis()}.jpg")
-                        val outputOptions = ImageCapture.OutputFileOptions.Builder(photoFile).build()
-                        cameraController.takePicture(
-                            outputOptions,
-                            ContextCompat.getMainExecutor(context),
-                            object : ImageCapture.OnImageSavedCallback {
-                                override fun onImageSaved(outputFileResults: ImageCapture.OutputFileResults) {
-                                    isCapturing = false
-                                    onMediaCaptured(photoFile, false)
+        if (settings.autoCapture == "Off") {
+            if (isCapturing && !isRecording && isPhotoMode) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .clickable {
+                            isCapturing = true
+                            speakText("Click!")
+                            val photoFile = File(context.cacheDir, "Selfie_${System.currentTimeMillis()}.jpg")
+                            val outputOptions = ImageCapture.OutputFileOptions.Builder(photoFile).build()
+                            cameraController.takePicture(
+                                outputOptions,
+                                ContextCompat.getMainExecutor(context),
+                                object : ImageCapture.OnImageSavedCallback {
+                                    override fun onImageSaved(outputFileResults: ImageCapture.OutputFileResults) {
+                                        isCapturing = false
+                                        onMediaCaptured(photoFile, false)
+                                    }
+    
+                                    override fun onError(exception: ImageCaptureException) {
+                                        isCapturing = false
+                                        speakText("Error: ${exception.message}")
+                                    }
                                 }
-
-                                override fun onError(exception: ImageCaptureException) {
-                                    isCapturing = false
-                                    speakText("Error: ${exception.message}")
+                            )
+                        }
+                )
+            } else if (isCapturing && !isPhotoMode) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .clickable {
+                            if (isRecording) {
+                                speakText("Recording stopped.")
+                                activeRecording?.stop()
+                                activeRecording = null
+                            } else {
+                                speakText("Recording started.")
+                                isRecording = true
+                                val videoFile = File(context.cacheDir, "Video_${System.currentTimeMillis()}.mp4")
+                                val outputOptions = FileOutputOptions.Builder(videoFile).build()
+                                @Suppress("MissingPermission")
+                                val recording = cameraController.startRecording(
+                                    outputOptions,
+                                    AudioConfig.create(true),
+                                    ContextCompat.getMainExecutor(context)
+                                ) { event ->
+                                    if (event is VideoRecordEvent.Finalize) {
+                                        isCapturing = false
+                                        isRecording = false
+                                        if (!event.hasError()) {
+                                            onMediaCaptured(videoFile, true)
+                                        } else {
+                                            speakText("Video error.")
+                                        }
+                                    }
                                 }
+                                activeRecording = recording
                             }
-                        )
-                    }
-            )
+                        }
+                )
+            }
         }
 
         // Top Navigation & Settings Row
