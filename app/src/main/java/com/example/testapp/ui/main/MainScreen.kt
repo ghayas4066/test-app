@@ -68,6 +68,33 @@ data class Category(val categoryName: String, val features: List<Feature>)
 fun MainScreen() {
     val context = LocalContext.current
     
+    var serverMessage by remember { mutableStateOf<Triple<String, String, Int>?>(null) }
+    
+    LaunchedEffect(Unit) {
+        com.example.testapp.updater.MessageChecker.checkForMessage(context) { title, msg, id ->
+            serverMessage = Triple(title, msg, id)
+        }
+    }
+
+    serverMessage?.let { (title, msg, id) ->
+        AlertDialog(
+            onDismissRequest = { 
+                serverMessage = null
+                com.example.testapp.updater.MessageChecker.markMessageAsRead(context, id)
+            },
+            title = { Text(title) },
+            text = { Text(msg) },
+            confirmButton = {
+                TextButton(onClick = { 
+                    serverMessage = null
+                    com.example.testapp.updater.MessageChecker.markMessageAsRead(context, id)
+                }) {
+                    Text("OK")
+                }
+            }
+        )
+    }
+    
     val permissions = remember {
         arrayOf(
             android.Manifest.permission.CAMERA,
