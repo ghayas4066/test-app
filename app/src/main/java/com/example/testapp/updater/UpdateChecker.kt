@@ -86,15 +86,10 @@ object UpdateChecker {
     }
 
     private fun downloadAndInstallUpdate(context: Context, downloadUrl: String) {
-        val destination = File(context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), "update.apk")
-        if (destination.exists()) {
-            destination.delete()
-        }
-
         val request = DownloadManager.Request(Uri.parse(downloadUrl))
             .setTitle("Downloading Update")
             .setDescription("Please wait while the new version is downloaded")
-            .setDestinationUri(Uri.fromFile(destination))
+            .setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, "update.apk")
             .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
 
         val downloadManager = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
@@ -104,7 +99,12 @@ object UpdateChecker {
             override fun onReceive(c: Context, intent: Intent) {
                 val id = intent.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1)
                 if (id == downloadId) {
-                    installApk(context, destination)
+                    val uri = downloadManager.getUriForDownloadedFile(downloadId)
+                    if (uri != null) {
+                        installApk(context, uri)
+                    } else {
+                        Toast.makeText(context, "Download failed or file not found.", Toast.LENGTH_SHORT).show()
+                    }
                     context.unregisterReceiver(this)
                 }
             }
@@ -118,10 +118,9 @@ object UpdateChecker {
         )
     }
 
-    private fun installApk(context: Context, apkFile: File) {
-        val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", apkFile)
+    private fun installApk(context: Context, apkUri: Uri) {
         val intent = Intent(Intent.ACTION_VIEW).apply {
-            setDataAndType(uri, "application/vnd.android.package-archive")
+            setDataAndType(apkUri, "application/vnd.android.package-archive")
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
