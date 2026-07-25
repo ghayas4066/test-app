@@ -11,14 +11,26 @@ android {
         applicationId = "com.example.testapp"
         minSdk = 24
         targetSdk = 36
-        versionCode = 4
-        versionName = "1.3"
+        versionCode = 5
+        versionName = "1.4"
+    }
+    signingConfigs {
+        create("release") {
+            storeFile = file("testapp-key.jks")
+            storePassword = "testapp123"
+            keyAlias = "testapp"
+            keyPassword = "testapp123"
+        }
     }
 
     buildTypes {
         release {
             isMinifyEnabled = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            signingConfig = signingConfigs.getByName("release")
+        }
+        debug {
+            signingConfig = signingConfigs.getByName("release")
         }
     }
     compileOptions {
